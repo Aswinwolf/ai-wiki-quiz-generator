@@ -1,46 +1,67 @@
 from dotenv import load_dotenv
 import os
 
-load_dotenv() 
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy.orm import Session
+from fastapi.middleware.cors import CORSMiddleware
 
 from services.scraper import WikiScraper
 from services.quiz_generator import generate_quiz
 
-from app.core.database import SessionLocal, engine
+from app.core.database import SessionLocal, engine, Base
 from app.models.article import WikipediaArticle
 from app.models.quiz import Quiz
 from app.models.question import Question
-from app.core.database import Base
-
-from fastapi.middleware.cors import CORSMiddleware
-
 
 from routes_history import router as history_router
 
-# create tables if not exist
-Base.metadata.create_all(bind=engine)
+# ----------------------------
+# ENV CHECK
+# ----------------------------
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY is missing in environment variables")
 
+# ----------------------------
+# APP INIT
+# ----------------------------
 app = FastAPI(title="AI Wiki Quiz Generator")
 
+# ----------------------------
+# CORS CONFIG (FIXED)
+# ----------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://ai-wiki-quiz-generator.vercel.app",
+        "https://ai-wiki-quiz-generator-ofci.vercel.app",
+        "https://ai-wiki-quiz-generator-ofci.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ----------------------------
+# DB INIT
+# ----------------------------
+Base.metadata.create_all(bind=engine)
 
-
+# ----------------------------
+# SCHEMAS
+# ----------------------------
 class WikiRequest(BaseModel):
     url: HttpUrl
     num_questions: int = 5
 
 
+# ----------------------------
+# DB DEPENDENCY
+# ----------------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -48,6 +69,10 @@ def get_db():
     finally:
         db.close()
 
+
+# ----------------------------
+# ROUTES
+# ----------------------------
 
 @app.get("/")
 def read_root():
@@ -116,7 +141,7 @@ def generate_quiz_api(request: WikiRequest, db: Session = Depends(get_db)):
 def get_quiz(quiz_id: int, db: Session = Depends(get_db)):
     quiz = db.query(Quiz).filter_by(id=quiz_id).first()
     if not quiz:
-        return {"error": "Quiz not found"}
+        raise HTTPException(status_code=404, detail="Quiz not found")
 
     questions = db.query(Question).filter_by(quiz_id=quiz_id).all()
 
@@ -138,11 +163,7 @@ def get_quiz(quiz_id: int, db: Session = Depends(get_db)):
     }
 
 
-# register history route
+# ----------------------------
+# HISTORY ROUTES
+# ----------------------------
 app.include_router(history_router)
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY is missing in .env file")
-
