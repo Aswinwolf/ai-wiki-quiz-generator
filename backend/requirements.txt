@@ -64,3 +64,4 @@ uvicorn
 requests
 beautifulsoup4
 pydantic
+langchain-google-genai
