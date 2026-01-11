@@ -3,10 +3,11 @@ import os
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from services.scraper import WikiScraper
 from services.quiz_generator import generate_quiz
@@ -18,48 +19,41 @@ from app.models.question import Question
 
 from routes_history import router as history_router
 
-# ----------------------------
-# ENV CHECK
-# ----------------------------
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY is missing in environment variables")
 
-# ----------------------------
-# APP INIT
-# ----------------------------
+
 app = FastAPI(title="AI Wiki Quiz Generator")
 
-# ----------------------------
-# CORS CONFIG (FIXED)
-# ----------------------------
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "https://ai-wiki-quiz-generator-mu.vercel.app/",
+        "http://localhost:5173",                      
+        "https://ai-wiki-quiz-generator-mu.vercel.app"  
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ----------------------------
-# DB INIT
-# ----------------------------
+
+@app.options("/{path:path}")
+async def preflight_handler(path: str, request: Request):
+    return JSONResponse(status_code=200, content={})
+
+
 Base.metadata.create_all(bind=engine)
 
-# ----------------------------
-# SCHEMAS
-# ----------------------------
+
 class WikiRequest(BaseModel):
     url: HttpUrl
     num_questions: int = 5
 
 
-# ----------------------------
-# DB DEPENDENCY
-# ----------------------------
+
 def get_db():
     db = SessionLocal()
     try:
@@ -68,9 +62,6 @@ def get_db():
         db.close()
 
 
-# ----------------------------
-# ROUTES
-# ----------------------------
 
 @app.get("/")
 def read_root():
@@ -80,11 +71,11 @@ def read_root():
 @app.post("/generate-quiz")
 def generate_quiz_api(request: WikiRequest, db: Session = Depends(get_db)):
     try:
-        # 1. SCRAPE
+       
         scraper = WikiScraper(str(request.url))
         article_data = scraper.parse()
 
-        # 2. SAVE / GET ARTICLE
+       
         article = db.query(WikipediaArticle).filter_by(url=str(request.url)).first()
         if not article:
             article = WikipediaArticle(
@@ -96,10 +87,10 @@ def generate_quiz_api(request: WikiRequest, db: Session = Depends(get_db)):
             db.commit()
             db.refresh(article)
 
-        # 3. GENERATE QUIZ
+       
         quiz_data = generate_quiz(article_data, request.num_questions)
 
-        # 4. SAVE QUIZ
+        
         quiz = Quiz(
             article_id=article.id,
             quiz_title=quiz_data["quiz_title"]
@@ -108,7 +99,7 @@ def generate_quiz_api(request: WikiRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(quiz)
 
-        # 5. SAVE QUESTIONS
+        
         for q in quiz_data["questions"]:
             question = Question(
                 quiz_id=quiz.id,
@@ -161,7 +152,5 @@ def get_quiz(quiz_id: int, db: Session = Depends(get_db)):
     }
 
 
-# ----------------------------
-# HISTORY ROUTES
-# ----------------------------
+
 app.include_router(history_router)
