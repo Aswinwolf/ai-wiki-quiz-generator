@@ -37,9 +37,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://ai-wiki-quiz-generator.vercel.app",
-        "https://ai-wiki-quiz-generator-ofci.vercel.app",
-        "https://ai-wiki-quiz-generator-ofci.onrender.com",
+        "https://ai-wiki-quiz-generator-mu.vercel.app/",
     ],
     allow_credentials=True,
     allow_methods=["*"],
