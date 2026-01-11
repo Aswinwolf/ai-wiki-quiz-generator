@@ -55,7 +55,7 @@ export default function GenerateQuiz() {
         />
 
         <button onClick={handleGenerate} disabled={loading}>
-          {loading ? "Generating Quiz..." : "Generate Quiz"}
+          {loading ? "Preparing a Test" : "Prepare Me"}
         </button>
       </div>
 
